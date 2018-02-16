@@ -6,10 +6,17 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"math"
 	"math/big"
 	"os"
 	"sort"
 )
+
+// entropy determines the entropy, in bits, of a password given m choices out
+// of n possibilities
+func entropy(m, n uint64) float64 {
+	return float64(m) * math.Log2(float64(n))
+}
 
 // countLines counts the number of lines in a file.
 func countLines(r io.Reader) (uint64, error) {
@@ -73,17 +80,17 @@ func readLines(r io.Reader, lineNums []uint64) (lines []string, err error) {
 	return lines, nil
 }
 
-// GetWords gets numWords words from a dictionary file.
-func GetWords(dict string, numWords uint64) (words []string, err error) {
+// getWords gets numWords words from a dictionary file.
+func getWords(dict string, numWords uint64) (words []string, ent float64, err error) {
 	file, err := os.Open(dict)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer file.Close()
 
 	numLines, err := countLines(file)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	max := big.NewInt(int64(numLines))
@@ -92,11 +99,11 @@ func GetWords(dict string, numWords uint64) (words []string, err error) {
 	for i := uint64(0); i < numWords; i++ {
 		b, err := rand.Int(rand.Reader, max)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		if !b.IsUint64() {
-			return nil, errors.New("Could not get random dictionary words")
+			return nil, 0, errors.New("Could not get random dictionary words")
 		}
 
 		lineNum := b.Uint64()
@@ -105,13 +112,15 @@ func GetWords(dict string, numWords uint64) (words []string, err error) {
 
 	_, err = file.Seek(0, 0)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	words, err = readLines(file, lineNums)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return words, nil
+	ent = entropy(numWords, numLines)
+
+	return words, ent, nil
 }
